@@ -5,35 +5,44 @@ import (
 	"net"
 	"net/http"
 	"net/rpc"
-	"time"
+	"os"
 )
 
-type RPCServer struct{}
+type RPCServer struct {
+	disk StorageAPI
+}
 
 // Volume operations
 
 func (r *RPCServer) MakeVol(arg *string, reply *RPCGenericReply) error {
-	log.Println("MakeVol", *arg)
-	return nil
+	return r.disk.MakeVol(*arg)
 }
 
 func (r *RPCServer) ListVols(arg *string, reply *ListVolsReply) error {
-	log.Println("StatVol", *arg)
-	vols := []VolInfo{{"aaaa", time.Now()}, {"bbbb", time.Now()}, {"cccc", time.Now()}}
+	vols, err := r.disk.ListVols()
+	if err != nil {
+		return err
+	}
 	reply.Vols = vols
 	return nil
 }
 
 func (r *RPCServer) StatVol(arg *string, reply *VolInfo) error {
-	log.Println("StatVol", *arg)
-	reply.Name = "aaaaa"
-	reply.Created = time.Now()
+	var err error
+	*reply, err = r.disk.StatVol(*arg)
+	if err != nil {
+		return err
+	}
+	if volInfo, err := r.disk.StatVol(*arg); err != nil {
+		return err
+	} else {
+		*reply = volInfo
+	}
 	return nil
 }
 
 func (r *RPCServer) DeleteVol(arg *string, reply *RPCGenericReply) error {
-	log.Println("DeleteVol", *arg)
-	return nil
+	return r.disk.DeleteVol(*arg)
 }
 
 // File operations
@@ -84,7 +93,14 @@ func (r *RPCServer) DeleteFile(arg *DeleteFileArgs, reply *RPCGenericReply) erro
 }
 
 func main() {
+	diskPath := os.Args[1]
+	if diskPath == "" {
+		log.Fatal("diskPath not given")
+	}
 	server := new(RPCServer)
+	disk := new(storageDisk)
+	disk.diskPath = diskPath
+	server.disk = disk
 	rpc.Register(server)
 	rpc.HandleHTTP()
 	l, e := net.Listen("tcp", ":8080")
